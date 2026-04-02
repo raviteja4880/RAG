@@ -1,0 +1,43 @@
+# Core Backend
+fastapi
+uvicorn
+python-dotenv
+pydantic
+pydantic[email]         # Required for EmailStr validation
+email-validator
+pydantic-settings
+asyncio
+
+# Database & Persistence (Production-Ready)
+pinecone-client
+langchain-pinecone
+motor                   # Async MongoDB Driver
+bcrypt                  # Secure Password Hashing
+pymongo                 # Standard Mongo Support
+
+# LangChain Ecosystem
+langchain>=0.2.0
+langchain-text-splitters
+langchain-core
+langchain-community
+langchain-groq
+langchain-huggingface
+langchain-experimental  # For Semantic Chunking
+
+# Performance & Reranking
+flashrank               # Lightweight Local Reranker
+httpx                   # Async HTTP client
+redis                   # Fast caching layer
+hiredis                 # Accelerated Redis parser
+
+# Ingestion & OCR
+pypdf
+rapidocr-onnxruntime
+pymupdf
+opencv-python
+tiktoken
+
+# Observability & Security
+structlog
+slowapi                 # Rate Limiting
+python-multipart
