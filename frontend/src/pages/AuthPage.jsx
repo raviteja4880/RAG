@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
 import axios from 'axios';
 import toast from 'react-hot-toast';
+import { motion, AnimatePresence } from 'framer-motion';
+import { Shield, ArrowRight, UserPlus, LogIn, ChevronRight } from 'lucide-react';
 
 const AuthPage = ({ onAuthSuccess }) => {
   const [mode, setMode] = useState('login'); // login | register
@@ -16,7 +18,7 @@ const AuthPage = ({ onAuthSuccess }) => {
     try {
       const res = await axios.post(`/api/auth/${mode}`, { email, password });
       toast.success(mode === 'login' ? 'Welcome back!' : 'Account created');
-      onAuthSuccess({ id: res.data.user_id, email: res.data.email, is_verified: true });
+      onAuthSuccess({ _id: res.data.user_id, email: res.data.email, is_verified: true });
     } catch (error) {
       const msg = error.response?.data?.detail || 'Authentication failed';
       toast.error(msg);
@@ -26,73 +28,117 @@ const AuthPage = ({ onAuthSuccess }) => {
   };
 
   return (
-    <div className="container-fluid min-vh-100 d-flex align-items-center justify-content-center" style={{ backgroundColor: '#ffffff' }}>
-      <div className="w-100" style={{ maxWidth: '360px' }}>
+    <div className="container-fluid min-vh-100 d-flex align-items-center justify-content-center p-4 bg-light overflow-hidden position-relative">
+      
+      {/* Background Decorative Elements */}
+      <div className="position-absolute top-0 start-0 w-100 h-100 overflow-hidden" style={{ zIndex: 0 }}>
+        <div className="position-absolute bg-primary rounded-circle blur-[150px]" style={{ width: '400px', height: '400px', top: '-100px', left: '-100px', opacity: 0.05 }}></div>
+        <div className="position-absolute bg-info rounded-circle blur-[150px]" style={{ width: '300px', height: '300px', bottom: '-80px', right: '-80px', opacity: 0.05 }}></div>
+      </div>
+
+      <motion.div 
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.7, ease: [0.16, 1, 0.3, 1] }}
+        className="bg-white rounded-5 p-5 shadow-2xl position-relative border-0" 
+        style={{ maxWidth: '440px', width: '100%', zIndex: 1 }}
+      >
         <div className="text-center mb-5">
-          <div className="mb-4 d-inline-block bg-dark text-white rounded-circle d-flex align-items-center justify-content-center mx-auto" style={{ width: '48px', height: '48px', fontSize: '24px' }}>
-            R
-          </div>
-          <h2 className="fw-bold h4">Welcome back</h2>
+          <motion.div 
+            whileHover={{ scale: 1.05 }}
+            className="mb-4 d-inline-flex bg-primary bg-opacity-10 text-primary rounded-4 p-3 mx-auto"
+          >
+            <Shield size={36} />
+          </motion.div>
+          <h2 className="fw-black text-dark h3 mb-2 tracking-tight">RAG Premium</h2>
+          <p className="text-muted small fw-medium">Secure Knowledge retrieval gateway</p>
         </div>
 
-        <form onSubmit={handleSubmit}>
-          <div className="mb-3">
-            <input 
-              type="email" 
-              className="form-control form-control-lg border-secondary border-opacity-25"
-              value={email}
-              onChange={e => setEmail(e.target.value)}
-              placeholder="Email address"
-              required
-              style={{ fontSize: '15px', borderRadius: '8px' }}
-            />
-          </div>
-
-          <div className="mb-4">
-            <input 
-              type="password" 
-              className="form-control form-control-lg border-secondary border-opacity-25"
-              value={password}
-              onChange={e => setPassword(e.target.value)}
-              placeholder="Password"
-              required
-              style={{ fontSize: '15px', borderRadius: '8px' }}
-            />
-          </div>
-
-          <button 
-            type="submit" 
-            className="btn btn-dark btn-lg w-100 mb-3 py-2"
-            disabled={isLoading}
-            style={{ fontSize: '15px', borderRadius: '8px', backgroundColor: '#10a37f', border: 'none' }}
+        <AnimatePresence mode="wait">
+          <motion.form 
+            key={mode}
+            initial={{ opacity: 0, x: 10 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: -10 }}
+            transition={{ duration: 0.3 }}
+            onSubmit={handleSubmit}
           >
-            {isLoading ? 'Processing...' : 'Continue'}
-          </button>
-        </form>
+            <div className="mb-3">
+              <label className="text-muted small fw-bold mb-2 ps-1 uppercase letter-spacing-wide" style={{ fontSize: '10px' }}>Email Address</label>
+              <input 
+                type="email" 
+                className="form-control form-control-lg bg-light border-0 text-dark focus-accent"
+                value={email}
+                onChange={e => setEmail(e.target.value)}
+                placeholder="name@company.com"
+                required
+                style={{ fontSize: '15px', borderRadius: '12px', padding: '14px 18px' }}
+              />
+            </div>
 
-        <div className="text-center mt-3">
-          <span className="text-muted small">
-            {mode === 'login' ? "Don't have an account? " : "Already have an account? "}
-          </span>
+            <div className="mb-5">
+              <label className="text-muted small fw-bold mb-2 ps-1 uppercase letter-spacing-wide" style={{ fontSize: '10px' }}>Password</label>
+              <input 
+                type="password" 
+                className="form-control form-control-lg bg-light border-0 text-dark focus-accent"
+                value={password}
+                onChange={e => setPassword(e.target.value)}
+                placeholder="••••••••"
+                required
+                style={{ fontSize: '15px', borderRadius: '12px', padding: '14px 18px' }}
+              />
+            </div>
+
+            <motion.button 
+              whileHover={{ scale: 1.02 }}
+              whileTap={{ scale: 0.98 }}
+              type="submit" 
+              className="btn btn-primary btn-lg w-100 py-3 shadow-lg d-flex align-items-center justify-content-center gap-2"
+              disabled={isLoading}
+              style={{ fontSize: '15px', borderRadius: '12px', fontWeight: '800', border: 'none', backgroundColor: 'var(--primary)' }}
+            >
+              {isLoading ? (
+                <div className="spinner-border spinner-border-sm" role="status"></div>
+              ) : (
+                <>
+                  {mode === 'login' ? <LogIn size={18} /> : <UserPlus size={18} />}
+                  <span>{mode === 'login' ? 'Continue' : 'Create Account'}</span>
+                </>
+              )}
+            </motion.button>
+          </motion.form>
+        </AnimatePresence>
+
+        <div className="text-center mt-5 pt-3 border-top" style={{ borderColor: 'rgba(0,0,0,0.05)' }}>
           <button 
-            className="btn btn-link btn-sm text-decoration-none p-0 ps-1"
-            style={{ color: '#10a37f', fontSize: '14px', fontWeight: '500' }}
+            className="btn btn-link btn-sm text-decoration-none text-muted transition-all hover-primary"
             onClick={() => setMode(mode === 'login' ? 'register' : 'login')}
+            style={{ fontSize: '13px', fontWeight: '600' }}
           >
-            {mode === 'login' ? "Sign up" : "Log in"}
+            {mode === 'login' ? "New user? Sign up free" : "Already have access? Log in"}
           </button>
         </div>
         
-        <div className="text-center mt-4">
+        <div className="text-center mt-3">
           <button 
-            className="btn btn-outline-secondary btn-sm w-100 border-secondary border-opacity-25"
-            style={{ borderRadius: '8px', fontSize: '14px', py: '8px' }}
-            onClick={() => onAuthSuccess({ id: 'guest', email: 'Guest User', is_verified: false })}
+            className="btn btn-light btn-sm w-100 d-flex align-items-center justify-content-center gap-2 py-3 border-0 transition-all font-bold"
+            style={{ borderRadius: '12px', fontSize: '13px', color: '#64748b', fontWeight: '700', backgroundColor: '#f1f5f9' }}
+            onClick={() => onAuthSuccess({ _id: 'guest', email: 'guest@rag.premium', is_verified: false })}
           >
             Continue as Guest
+            <ChevronRight size={16} />
           </button>
         </div>
-      </div>
+      </motion.div>
+
+      <style dangerouslySetInnerHTML={{ __html: `
+        .focus-accent:focus { background-color: #ffffff !important; border: 1px solid var(--primary) !important; box-shadow: 0 0 0 4px rgba(16,163,127,0.08) !important; outline: none; }
+        .hover-primary:hover { color: var(--primary) !important; }
+        .fw-black { font-weight: 900; }
+        .tracking-tight { letter-spacing: -0.02em; }
+        .letter-spacing-wide { letter-spacing: 0.1em; }
+        .shadow-2xl { box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.08); }
+      `}} />
     </div>
   );
 };

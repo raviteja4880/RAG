@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import axios from 'axios';
 import toast from 'react-hot-toast';
+import { motion, AnimatePresence } from 'framer-motion';
 
 // Simple Components
 import ChatLayout from '../components/ChatLayout';
@@ -17,9 +18,7 @@ const ChatPage = ({ user, onLogout }) => {
   const [uploadingFileName, setUploadingFileName] = useState('');
   const [streamingContent, setStreamingContent] = useState('');
   
-  // Ref to store AbortController for upload cancellation
   const uploadAbortControllerRef = useRef(null);
-
   const currentSession = sessions.find(s => s._id === currentSessionId) || { messages: [] };
   const messagesEndRef = useRef(null);
 
@@ -37,7 +36,7 @@ const ChatPage = ({ user, onLogout }) => {
 
   const fetchSessions = async (targetId = null) => {
     try {
-      const res = await axios.get(`/api/history/sessions?user_id=${user.id}`);
+      const res = await axios.get(`/api/history/sessions?user_id=${user._id || user.id}`);
       setSessions(res.data.sessions);
       if (res.data.sessions.length > 0) {
         if (targetId) {
@@ -51,7 +50,7 @@ const ChatPage = ({ user, onLogout }) => {
 
   const createNewChat = async () => {
     try {
-      const res = await axios.post(`/api/history/create?user_id=${user.id}`);
+      const res = await axios.post(`/api/history/create?user_id=${user._id || user.id}`);
       setSessions([res.data, ...sessions]);
       setCurrentSessionId(res.data._id);
       return res.data._id;
@@ -70,7 +69,33 @@ const ChatPage = ({ user, onLogout }) => {
     } catch (e) { toast.error('Delete failed'); }
   };
 
+  const handleTogglePin = async (id) => {
+     try {
+       const res = await axios.post(`/api/history/toggle_pin/${id}`);
+       setSessions(prev => 
+         prev.map(s => s._id === id ? { ...s, is_pinned: res.data.is_pinned } : s)
+           .sort((a,b) => (b.is_pinned - a.is_pinned) || (new Date(b.updated_at) - new Date(a.updated_at)))
+       );
+       toast.success(res.data.is_pinned ? 'Conversation Pinned' : 'Unpinned');
+     } catch (e) { toast.error('Action failed'); }
+  };
+
+  const handleRenameSession = async (id, title) => {
+     try {
+       await axios.post(`/api/history/rename/${id}?title=${encodeURIComponent(title)}`);
+       setSessions(prev => prev.map(s => s._id === id ? { ...s, title } : s));
+       toast.success('Renamed');
+     } catch (e) { toast.error('Rename failed'); }
+  };
+
   const handleUpload = async (file) => {
+    // --- FILE SIZE RESTRICTION ---
+    const MAX_SIZE_MB = 10;
+    if (file.size > MAX_SIZE_MB * 1024 * 1024) {
+      toast.error(`File too large. Maximum limit is ${MAX_SIZE_MB}MB.`);
+      return;
+    }
+
     let sid = currentSessionId;
     if (!sid) sid = await createNewChat();
     if (!sid) return;
@@ -79,7 +104,6 @@ const ChatPage = ({ user, onLogout }) => {
     setUploadingFileName(file.name);
     setUploadProgress(0);
     
-    // Create new abort controller for this upload
     const controller = new AbortController();
     uploadAbortControllerRef.current = controller;
 
@@ -87,15 +111,11 @@ const ChatPage = ({ user, onLogout }) => {
     formData.append('file', file);
     
     try {
-      // PERSISTENT UPLOAD: Added session_id to enable document history persistence in DB
-      await axios.post(`/api/upload?user_id=${user.id}&session_id=${sid}`, formData, {
+      await axios.post(`/api/upload?user_id=${user._id || user.id}&session_id=${sid}`, formData, {
         signal: controller.signal,
         onUploadProgress: (p) => setUploadProgress(Math.round((p.loaded * 100) / p.total))
       });
-      
       toast.success(`"${file.name}" indexed successfully.`);
-      
-      // Fetch full history from DB to ensure local state has the persisted document marker
       fetchSessions(sid);
     } catch(e) { 
       if (axios.isCancel(e) || e.name === 'CanceledError' || e.name === 'AbortError') {
@@ -118,11 +138,15 @@ const ChatPage = ({ user, onLogout }) => {
   };
 
   const handleAsk = async (query) => {
-    if (isAsking) return;
+    if (!query.trim() || isAsking) return;
     let sid = currentSessionId;
     if (!sid) sid = await createNewChat();
     if (!sid) return;
 
+    // --- Optimistic Update ---
+    const userMessage = { role: 'user', content: query, timestamp: new Date() };
+    setSessions(prev => prev.map(s => s._id === sid ? { ...s, messages: [...s.messages, userMessage], updated_at: new Date() } : s));
+    
     const history = currentSession.messages || [];
     
     setIsAsking(true);
@@ -130,7 +154,7 @@ const ChatPage = ({ user, onLogout }) => {
     setStreamingContent('');
 
     try {
-      const response = await fetch(`/api/ask?user_id=${user.id}`, {
+      const response = await fetch(`/api/ask?user_id=${user._id || user.id}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ question: query, history, session_id: sid })
@@ -176,31 +200,43 @@ const ChatPage = ({ user, onLogout }) => {
       onCreateNew={createNewChat}
       onSessionSelect={setCurrentSessionId}
       onDeleteSession={deleteSession}
+      onTogglePin={handleTogglePin}
+      onRenameSession={handleRenameSession}
     >
-      <div className="d-flex flex-column h-100 bg-white">
+      <div className="d-flex flex-column h-100 bg-chat">
         
         {/* Messages Area */}
-        <div className="flex-grow-1 overflow-auto">
-          
-          {(!currentSessionId || currentSession.messages.length === 0) && !isAsking && !isUploading && (
-             <div className="text-center py-5 mt-5">
-                <div className="mb-4 d-inline-block bg-dark text-white rounded-circle d-flex align-items-center justify-content-center mx-auto" style={{ width: '64px', height: '64px', fontSize: '32px' }}>
-                  R
-                </div>
-                <h1 className="fw-bold mb-3" style={{ fontSize: '2rem' }}>RAG Assistant</h1>
-                <p className="text-muted" style={{ fontSize: '1.25rem' }}>Upload documents and ask questions.</p>
-             </div>
-          )}
+        <div className="flex-grow-1 overflow-auto custom-scrollbar">
+          <AnimatePresence>
+            {(!currentSessionId || currentSession.messages.length === 0) && !isAsking && !isUploading && (
+               <motion.div 
+                 initial={{ opacity: 0, y: 20 }}
+                 animate={{ opacity: 1, y: 0 }}
+                 exit={{ opacity: 0, scale: 0.95 }}
+                 className="text-center py-5 mt-5 px-4"
+               >
+                  <div className="mb-4 d-inline-flex bg-white shadow-sm rounded-4 d-flex align-items-center justify-content-center mx-auto border" 
+                       style={{ width: '84px', height: '84px', fontSize: '38px', fontWeight: '900', color: 'var(--primary)', borderColor: 'rgba(0,0,0,0.05)' }}>
+                    R
+                  </div>
+                  <h1 className="fw-black mb-3 text-dark tracking-tighter" style={{ fontSize: '3rem' }}>
+                    RAG <span className="text-accent">Premium</span>
+                  </h1>
+                  <p className="text-muted mx-auto" style={{ fontSize: '1.2rem', maxWidth: '480px', fontWeight: '500' }}>
+                    The advanced retrieval gateway. Connect your documents and experience conversational intelligence with private data sovereignty.
+                  </p>
+               </motion.div>
+            )}
+          </AnimatePresence>
 
           {currentSession.messages.map((msg, i) => (
             <MessageBubble key={i} role={msg.role} content={msg.content} type={msg.content?.includes('[Document Uploaded:') ? 'file' : 'text'} />
           ))}
 
-          {/* Upload Progress Bubble */}
           {isUploading && (
             <MessageBubble 
               role="user" 
-              content={`Uploading ${uploadingFileName}...`} 
+              content={`Analyzing "${uploadingFileName}" vector space...`} 
               isUploading={true}
               uploadProgress={uploadProgress}
               onCancel={cancelUpload}
@@ -216,19 +252,26 @@ const ChatPage = ({ user, onLogout }) => {
             />
           )}
 
-          <div ref={messagesEndRef} style={{ height: '8rem' }} />
+          <div ref={messagesEndRef} style={{ height: '12rem' }} />
         </div>
 
         {/* Input Area */}
-        <ChatInput 
-          onSend={handleAsk}
-          onUpload={handleUpload}
-          isAsking={isAsking}
-          isUploading={isUploading}
-          uploadProgress={uploadProgress}
-        />
+        <div className="mt-auto">
+          <ChatInput 
+            onSend={handleAsk}
+            onUpload={handleUpload}
+            isAsking={isAsking}
+            isUploading={isUploading}
+            uploadProgress={uploadProgress}
+          />
+        </div>
 
       </div>
+      <style dangerouslySetInnerHTML={{ __html: `
+        .fw-black { font-weight: 900; }
+        .tracking-tighter { letter-spacing: -0.04em; }
+        .shadow-2xl { box-shadow: 0 40px 60px -15px rgba(0, 0, 0, 0.05); }
+      `}} />
     </ChatLayout>
   );
 };

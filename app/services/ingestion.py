@@ -12,18 +12,27 @@ from app.core.config import settings
 from app.utils.file_loader import load_pdf
 from app.core.logger import logger
 
+import threading
+
 class IngestionService:
     def __init__(self):
         # 1. Faster Splitter for Production (Real-time compatible)
-        # Recursive splitter is much faster than SemanticChunker
         self.text_splitter = RecursiveCharacterTextSplitter(
-            chunk_size=1200,
-            chunk_overlap=200,
+            chunk_size=600,
+            chunk_overlap=100,
             add_start_index=True
         )
-        
-        # 2. Shared OCR Instance (Warm-start)
-        self.ocr_engine = RapidOCR()
+        self._ocr_engine = None
+        self._lock = threading.Lock()
+
+    @property
+    def ocr_engine(self):
+        if self._ocr_engine is None:
+            with self._lock:
+                if self._ocr_engine is None:
+                    logger.info("INITIALIZING_OCR_ENGINE")
+                    self._ocr_engine = RapidOCR()
+        return self._ocr_engine
 
     def _process_page_ocr(self, page_data) -> Document:
         """Helper to process a single page for parallel execution."""
@@ -61,17 +70,18 @@ class IngestionService:
             page = doc.load_page(page_num)
             tasks.append((page_num, page.get_pixmap(), source_name))
         
-        # Execute in parallel threads
-        # OCR is primarily I/O and external binary heavy, threads work well here
         documents = []
-        with concurrent.futures.ThreadPoolExecutor(max_workers=os.cpu_count() or 4) as executor:
+        with concurrent.futures.ThreadPoolExecutor(max_workers=8) as executor:
             documents = list(executor.map(self._process_page_ocr, tasks))
             
         doc.close()
         return documents
 
-    def process_file(self, file_path: str, user_id: str = "guest") -> List[Document]:
+    def process_file(self, file_path: str, user_id: str = "guest", session_id: str = None) -> List[Document]:
         """Deeply optimized ingestion pipeline for real-time responsiveness."""
+        if not session_id:
+            session_id = str(uuid.uuid4())
+            
         ext = os.path.splitext(file_path)[1].lower()
         documents = []
 
@@ -99,6 +109,7 @@ class IngestionService:
                 doc.metadata.update({
                     "chunk_id": str(uuid.uuid4()),
                     "user_id": user_id,
+                    "session_id": session_id,
                     "processed_at": now,
                     "char_count": len(doc.page_content),
                     "node_rank": i

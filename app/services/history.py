@@ -15,9 +15,9 @@ class HistoryService:
         return self.sessions
 
     async def get_sessions_for_user(self, user_id: str) -> List[dict]:
-        """Fetch all conversation history for a specific user ID."""
+        """Fetch all conversation history for a specific user ID, sorted by pinned and then date."""
         coll = self._get_coll()
-        cursor = coll.find({"user_id": user_id}).sort("updated_at", -1)
+        cursor = coll.find({"user_id": user_id}).sort([("is_pinned", -1), ("updated_at", -1)])
         sessions = await cursor.to_list(length=100)
         return sessions
 
@@ -29,6 +29,7 @@ class HistoryService:
             "user_id": user_id,
             "title": title,
             "messages": [],
+            "is_pinned": False,
             "updated_at": datetime.utcnow()
         }
         await coll.insert_one(sess)
@@ -65,5 +66,15 @@ class HistoryService:
         coll = self._get_coll()
         await coll.delete_one({"_id": session_id})
         logger.info("CHAT_SESSION_DELETED", id=session_id)
+
+    async def toggle_pin(self, session_id: str):
+        """Toggle the pinned state of a conversation."""
+        coll = self._get_coll()
+        session = await coll.find_one({"_id": session_id})
+        if session:
+            new_state = not session.get("is_pinned", False)
+            await coll.update_one({"_id": session_id}, {"$set": {"is_pinned": new_state}})
+            return new_state
+        return False
 
 history_service = HistoryService()

@@ -3,7 +3,7 @@ import shutil
 import tempfile
 import time
 from typing import List, Optional
-from fastapi import APIRouter, File, UploadFile, HTTPException, Depends, Request
+from fastapi import APIRouter, File, UploadFile, HTTPException, Depends, Request, BackgroundTasks
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 from slowapi import Limiter
@@ -68,7 +68,10 @@ async def create_session(user_id: str):
 
 @router.delete("/history/session/{session_id}")
 async def delete_session(session_id: str):
+    # 1. Clear Database Messages
     await history_service.delete_session(session_id)
+    # 2. Clear Vectors for strict data isolation
+    vector_store.delete_by_session(session_id)
     return {"status": "deleted"}
 
 @router.post("/history/add_message")
@@ -76,11 +79,26 @@ async def add_message(req: MessageRequest):
     await history_service.add_message(req.session_id, req.role, req.content)
     return {"status": "success"}
 
+@router.post("/history/toggle_pin/{session_id}")
+async def toggle_pin(session_id: str):
+    new_state = await history_service.toggle_pin(session_id)
+    return {"is_pinned": new_state}
+
+@router.post("/history/rename/{session_id}")
+async def rename_session(session_id: str, title: str):
+    await history_service.update_title(session_id, title)
+    return {"status": "renamed", "title": title}
+
 # 5. Core RAG Routes
 @router.post("/upload")
 @limiter.limit(f"{settings.RATE_LIMIT_PER_MINUTE}/minute")
-async def upload_file(request: Request, file: UploadFile = File(...), user_id: str = "guest", session_id: Optional[str] = None):
-    """Deep ingestion pipeline with session persistence for document markers."""
+async def upload_file(
+    request: Request, 
+    file: UploadFile = File(...), 
+    user_id: str = "guest", 
+    session_id: Optional[str] = None
+):
+    """Deep ingestion pipeline with synchronous persistence for verified indexing."""
     start_time = time.time()
     logger.info("UPLOAD_REQUEST", filename=file.filename, user_id=user_id)
     
@@ -90,21 +108,23 @@ async def upload_file(request: Request, file: UploadFile = File(...), user_id: s
             shutil.copyfileobj(file.file, tmp)
             tmp_path = tmp.name
 
-        docs = ingestion.process_file(tmp_path, user_id=user_id)
+        # --- SYNCHRONOUS PROCESSING (Ensures data is ready) ---
+        docs = ingestion.process_file(tmp_path, user_id=user_id, session_id=session_id)
         vector_store.upsert_documents(docs)
-        os.remove(tmp_path)
         
-        # PERSIST: Add document marker message to chat history if session is active
+        # PERSIST: Add document marker to chat history
         if session_id:
              await history_service.add_message(session_id, "user", f"[Document Uploaded: {file.filename}]")
         
+        os.remove(tmp_path)
         latency = time.time() - start_time
         logger.info("UPLOAD_SUCCESS", chunks=len(docs), latency=round(latency, 2))
         
         return {
             "status": "success",
             "filename": file.filename,
-            "chunks_indexed": len(docs)
+            "chunks_indexed": len(docs),
+            "latency": round(latency, 2)
         }
     except Exception as e:
         logger.error("UPLOAD_FAILURE", error=str(e), filename=file.filename)
@@ -125,8 +145,13 @@ async def ask_question(request: Request, body: QuestionRequest, user_id: str = "
         if body.session_id:
             await history_service.add_message(body.session_id, "user", body.question)
 
-        # 1. Phase A: Retrieval (Cached & Filtered by user_id)
-        top_docs = retrieval.retrieve_and_rerank(body.question, history_list, user_id=user_id)
+        # 1. Phase A: Retrieval (Cached & Filtered by user_id AND session_id)
+        top_docs = retrieval.retrieve_and_rerank(
+            body.question, 
+            history_list, 
+            user_id=user_id, 
+            session_id=body.session_id
+        )
         
         if not top_docs:
              context = "No relevant documents found for this query in your database."

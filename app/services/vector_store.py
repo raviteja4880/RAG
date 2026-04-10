@@ -66,10 +66,11 @@ class VectorStoreService:
             raise e
 
     def upsert_documents(self, documents: List):
-        """Add semantic chunks to Pinecone cloud with batch ingestion."""
+        """Ultra-fast batch ingestion for semantic chunks."""
         logger.info("UPSERT_START", count=len(documents))
         try:
-            self.vector_store.add_documents(documents)
+            # Increased batch_size for production-grade ingestion speed
+            self.vector_store.add_documents(documents, batch_size=100)
             logger.info("UPSERT_SUCCESS")
         except Exception as e:
             logger.error("UPSERT_FAILED", error=str(e))
@@ -79,3 +80,14 @@ class VectorStoreService:
         """Return a production retriever with custom top-K."""
         kwargs = search_kwargs or {"k": settings.RETRIEVAL_K}
         return self.vector_store.as_retriever(search_kwargs=kwargs)
+
+    def delete_by_session(self, session_id: str):
+        """Permanent cleanup: Remove all vectors associated with a specific session."""
+        logger.info("VECTOR_CLEANUP_START", session_id=session_id)
+        try:
+            # Note: Pinecone Langchain wrapper doesn't always expose delete by metadata filter directly 
+            # in older versions, so we use the raw index for reliability.
+            self.vector_store._index.delete(filter={"session_id": session_id})
+            logger.info("VECTOR_CLEANUP_SUCCESS", session_id=session_id)
+        except Exception as e:
+            logger.error("VECTOR_CLEANUP_FAILED", session_id=session_id, error=str(e))

@@ -42,35 +42,35 @@ app.include_router(router)
 # 5. Production Diagnostics & Boot Check
 @app.on_event("startup")
 async def startup_event():
-    print("\n" + "═"*60)
-    print("      🛸  RAG PREMIUM v3.0 - HIGH PERFORMANCE BOOT  🛸")
-    print("═"*60)
+    print("\n" + "="*60)
+    print("      ***  RAG PREMIUM v3.0 - HIGH PERFORMANCE BOOT  ***")
+    print("="*60)
     
     # Check MongoDB
     from app.db.client import connect_to_mongo
     try:
         await connect_to_mongo()
-        print("  🟢 MONGODB ATLAS      |  CONNECTED (PERSISTENCE LAYER)")
-    except Exception:
-        print("  🔴 MONGODB ATLAS      |  OFFLINE (CHECK URI)")
+        print("  [OK] MONGODB ATLAS    |  CONNECTED (PERSISTENCE LAYER)")
+    except Exception as e:
+        print(f"  [ERROR] MONGODB ATLAS |  OFFLINE (ERROR: {e})")
 
     # Check Pinecone
     try:
         from pinecone import Pinecone
         pc = Pinecone(api_key=settings.PINECONE_API_KEY)
         pc.list_indexes()
-        print("  🟢 PINECONE VECTOR DB |  CONNECTED (VERSIONED CLUSTER)")
+        print("  [OK] PINECONE VECTOR  |  CONNECTED (VERSIONED CLUSTER)")
     except Exception as e:
-        print(f"  🔴 PINECONE VECTOR DB |  OFFLINE (ERROR: {e})")
+        print(f"  [ERROR] PINECONE VECTOR|  OFFLINE (ERROR: {e})")
         
     # Check Groq Hub
     if settings.GROQ_API_KEY and len(settings.GROQ_API_KEY) > 10:
-        print("  🟢 GROQ CORE AI HUB   |  AUTHORIZED (STREAMING ENABLED)")
+        print("  [OK] GROQ CORE AI HUB |  AUTHORIZED (STREAMING ENABLED)")
     else:
-        print("  🔴 GROQ CORE AI HUB   |  UNAUTHORIZED (KEY MISSING)")
+        print("  [ERROR] GROQ HUB      |  UNAUTHORIZED (KEY MISSING)")
 
-    print("  🟢 RAG PIPELINE       |  REAL-TIME RECURSIVE CHUNKING ACTIVE")
-    print("═"*60 + "\n")
+    print("  [OK] RAG PIPELINE     |  REAL-TIME RECURSIVE CHUNKING ACTIVE")
+    print("="*60 + "\n")
 
 @app.on_event("shutdown")
 async def shutdown_event():

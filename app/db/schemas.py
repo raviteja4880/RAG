@@ -12,6 +12,7 @@ class ChatSession(BaseModel):
     user_id: str
     title: str
     messages: List[Message] = []
+    is_pinned: bool = False
     updated_at: datetime = Field(default_factory=datetime.utcnow)
 
 class UserSchema(BaseModel):
