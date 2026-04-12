@@ -6,7 +6,6 @@ pydantic==2.7.4
 pydantic[email]==2.7.4
 email-validator==2.1.1
 pydantic-settings==2.3.3
-asyncio==3.4.3
 gunicorn==22.0.0
 
 # Database & Persistence (Production-Ready)

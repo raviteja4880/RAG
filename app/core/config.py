@@ -12,6 +12,7 @@ class Settings(BaseSettings):
     PROJECT_NAME: str = "RAG Premium"
     VERSION: str = "3.0.0"
     API_V1_STR: str = "/api/v1"
+    FRONTEND_URL: str = "http://localhost:5173"
     
     # LLM & AI Keys
     GROQ_API_KEY: str
@@ -34,7 +35,7 @@ class Settings(BaseSettings):
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24 * 7 # 7 days
     
     # CORS
-    BACKEND_CORS_ORIGINS: List[str] = ["http://localhost:3000", "http://localhost:5173", "https://your-vercel-domain.vercel.app"]
+    BACKEND_CORS_ORIGINS: List[str] = ["http://localhost:3000", "http://localhost:5173", "https://rag-three-tau.vercel.app"]
     
     # RAG Hyperparameters
     RETRIEVAL_K: int = 15
