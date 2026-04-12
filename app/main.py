@@ -122,7 +122,7 @@ async def health_check():
 async def startup_event():
     logger.info("BOOT_START", env=settings.ENV, debug=settings.DEBUG)
     
-    # Check MongoDB
+    # Check MongoDB (Async - Safe)
     from app.db.client import connect_to_mongo
     try:
         await connect_to_mongo()
@@ -130,14 +130,8 @@ async def startup_event():
     except Exception as e:
         logger.error("DB_STATUS", engine="MongoDB", status="OFFLINE", error=str(e))
 
-    # Check Pinecone
-    try:
-        from pinecone import Pinecone
-        pc = Pinecone(api_key=settings.PINECONE_API_KEY)
-        pc.list_indexes()
-        logger.info("DB_STATUS", engine="Pinecone", status="CONNECTED")
-    except Exception as e:
-        logger.error("DB_STATUS", engine="Pinecone", status="OFFLINE", error=str(e))
+    # Diagnostic check (Silent)
+    logger.info("BOOT_COMPLETE", status="LISTENING")
 
 @app.on_event("shutdown")
 async def shutdown_event():
