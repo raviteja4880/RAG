@@ -9,42 +9,44 @@ from pydantic import BaseModel, Field
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 
-from app.core.config import settings
-from app.services.ingestion import IngestionService
-from app.services.retrieval import RetrievalService
-from app.services.llm import LLMService
-from app.services.vector_store import VectorStoreService
 from app.services.auth import auth_service
 from app.services.history import history_service
 from app.db.schemas import LoginRequest, RegisterRequest
 from app.core.logger import logger
 
 # 1. Setup API Router & Services
+print("STEP 2: Initializing FastAPI Router...")
 router = APIRouter()
 limiter = Limiter(key_func=get_remote_address)
 
 # Lazy Service Singletons (Prevents blocking server startup)
 _services = {}
 
-def get_ingestion() -> IngestionService:
+def get_ingestion():
     if "ingestion" not in _services:
+        from app.services.ingestion import IngestionService
         _services["ingestion"] = IngestionService()
     return _services["ingestion"]
 
-def get_retrieval() -> RetrievalService:
+def get_retrieval():
     if "retrieval" not in _services:
+        from app.services.retrieval import RetrievalService
         _services["retrieval"] = RetrievalService()
     return _services["retrieval"]
 
-def get_llm() -> LLMService:
+def get_llm():
     if "llm" not in _services:
+        from app.services.llm import LLMService
         _services["llm"] = LLMService()
     return _services["llm"]
 
-def get_vector_store() -> VectorStoreService:
+def get_vector_store():
     if "vector_store" not in _services:
+        from app.services.vector_store import VectorStoreService
         _services["vector_store"] = VectorStoreService()
     return _services["vector_store"]
+
+print("STEP 3: Routes fully loaded.")
 
 # 2. Pydantic Models
 class MessageRequest(BaseModel):

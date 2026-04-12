@@ -9,9 +9,11 @@ from slowapi.util import get_remote_address
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import Response
 
+print("STEP 1: App Gateway Loading...")
 from app.api.routes import router
 from app.core.config import settings
 from app.core.logger import logger
+print("STEP 4: Security & Middleware Ready.")
 
 # --- 1. Production Diagnostics & Boot ---
 def create_application() -> FastAPI:
@@ -24,6 +26,7 @@ def create_application() -> FastAPI:
     )
     return application
 
+print("STEP 5: Server binding to port...")
 app = create_application()
 limiter = Limiter(key_func=get_remote_address)
 
