@@ -1,43 +1,45 @@
 # Core Backend
-fastapi
-uvicorn
-python-dotenv
-pydantic
-pydantic[email]         # Required for EmailStr validation
-email-validator
-pydantic-settings
-asyncio
+fastapi==0.111.0
+uvicorn==0.30.1
+python-dotenv==1.0.1
+pydantic==2.7.4
+pydantic[email]==2.7.4
+email-validator==2.1.1
+pydantic-settings==2.3.3
+asyncio==3.4.3
+gunicorn==22.0.0
 
 # Database & Persistence (Production-Ready)
-pinecone-client
-langchain-pinecone
-motor                   # Async MongoDB Driver
-bcrypt                  # Secure Password Hashing
-pymongo                 # Standard Mongo Support
+pinecone-client==4.1.1
+langchain-pinecone==0.1.1
+motor==3.4.0
+bcrypt==4.1.3
+pymongo==4.7.3
 
 # LangChain Ecosystem
-langchain>=0.2.0
-langchain-text-splitters
-langchain-core
-langchain-community
-langchain-groq
-langchain-huggingface
-langchain-experimental  # For Semantic Chunking
+langchain==0.2.1
+langchain-text-splitters==0.2.0
+langchain-core==0.2.3
+langchain-community==0.2.1
+langchain-groq==0.1.3
+langchain-huggingface==0.0.3
+langchain-experimental==0.0.59
 
 # Performance & Reranking
-flashrank               # Lightweight Local Reranker
-httpx                   # Async HTTP client
-redis                   # Fast caching layer
-hiredis                 # Accelerated Redis parser
+flashrank==0.2.5
+httpx==0.27.0
+redis==5.0.4
+hiredis==2.3.2
 
 # Ingestion & OCR
-pypdf
-rapidocr-onnxruntime
-pymupdf
-opencv-python
-tiktoken
+pypdf==4.2.0
+rapidocr-onnxruntime==1.3.24
+pymupdf==1.24.5
+opencv-python==4.9.0.80
+tiktoken==0.7.0
 
 # Observability & Security
-structlog
-slowapi                 # Rate Limiting
-python-multipart
+structlog==24.2.0
+slowapi==0.1.9
+python-multipart==0.0.9
+pyjwt==2.8.0

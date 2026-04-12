@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
-import axios from 'axios';
+import apiClient from '../api/apiClient';
+import axios from 'axios'; // Still needed for axios.isCancel
 import toast from 'react-hot-toast';
 import { motion, AnimatePresence } from 'framer-motion';
 
@@ -36,8 +37,9 @@ const ChatPage = ({ user, onLogout }) => {
 
   const fetchSessions = async (targetId = null) => {
     try {
-      const res = await axios.get(`/api/history/sessions?user_id=${user._id || user.id}`);
-      setSessions(res.data.sessions);
+      const res = await apiClient.get(`/history/sessions?user_id=${user._id || user.id}`);
+      const sessionsData = res.data.data ? res.data.data.sessions : res.data.sessions;
+      setSessions(sessionsData);
       if (res.data.sessions.length > 0) {
         if (targetId) {
           setCurrentSessionId(targetId);
@@ -50,16 +52,17 @@ const ChatPage = ({ user, onLogout }) => {
 
   const createNewChat = async () => {
     try {
-      const res = await axios.post(`/api/history/create?user_id=${user._id || user.id}`);
-      setSessions([res.data, ...sessions]);
-      setCurrentSessionId(res.data._id);
-      return res.data._id;
+      const res = await apiClient.post(`/history/create?user_id=${user._id || user.id}`);
+      const sessionData = res.data.data || res.data;
+      setSessions([sessionData, ...sessions]);
+      setCurrentSessionId(sessionData._id);
+      return sessionData._id;
     } catch (e) { toast.error('Failed to create session'); return null; }
   };
 
   const deleteSession = async (id) => {
     try {
-      await axios.delete(`/api/history/session/${id}`);
+      await apiClient.delete(`/history/session/${id}`);
       const filtered = sessions.filter(s => s._id !== id);
       setSessions(filtered);
       if (currentSessionId === id) {
@@ -71,9 +74,10 @@ const ChatPage = ({ user, onLogout }) => {
 
   const handleTogglePin = async (id) => {
      try {
-       const res = await axios.post(`/api/history/toggle_pin/${id}`);
+       const res = await apiClient.post(`/history/toggle_pin/${id}`);
+       const result = res.data.data || res.data;
        setSessions(prev => 
-         prev.map(s => s._id === id ? { ...s, is_pinned: res.data.is_pinned } : s)
+         prev.map(s => s._id === id ? { ...s, is_pinned: result.is_pinned } : s)
            .sort((a,b) => (b.is_pinned - a.is_pinned) || (new Date(b.updated_at) - new Date(a.updated_at)))
        );
        toast.success(res.data.is_pinned ? 'Conversation Pinned' : 'Unpinned');
@@ -82,7 +86,7 @@ const ChatPage = ({ user, onLogout }) => {
 
   const handleRenameSession = async (id, title) => {
      try {
-       await axios.post(`/api/history/rename/${id}?title=${encodeURIComponent(title)}`);
+       await apiClient.post(`/history/rename/${id}?title=${encodeURIComponent(title)}`);
        setSessions(prev => prev.map(s => s._id === id ? { ...s, title } : s));
        toast.success('Renamed');
      } catch (e) { toast.error('Rename failed'); }
@@ -111,7 +115,7 @@ const ChatPage = ({ user, onLogout }) => {
     formData.append('file', file);
     
     try {
-      await axios.post(`/api/upload?user_id=${user._id || user.id}&session_id=${sid}`, formData, {
+      await apiClient.post(`/upload?user_id=${user._id || user.id}&session_id=${sid}`, formData, {
         signal: controller.signal,
         onUploadProgress: (p) => setUploadProgress(Math.round((p.loaded * 100) / p.total))
       });
@@ -154,7 +158,8 @@ const ChatPage = ({ user, onLogout }) => {
     setStreamingContent('');
 
     try {
-      const response = await fetch(`/api/ask?user_id=${user._id || user.id}`, {
+      const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
+      const response = await fetch(`${API_BASE}/api/v1/ask?user_id=${user._id || user.id}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ question: query, history, session_id: sid })

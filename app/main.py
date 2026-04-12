@@ -1,82 +1,146 @@
-from fastapi import FastAPI, Request
+import time
+from fastapi import FastAPI, Request, status
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
+from fastapi.exceptions import RequestValidationError
 from slowapi.util import get_remote_address
+from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.responses import Response
 
 from app.api.routes import router
 from app.core.config import settings
+from app.core.logger import logger
 
-# 1. Initialize API Gateway
-limiter = Limiter(key_func=get_remote_address)
-app = FastAPI(
-    title="RAG Premium 🛸 (High-Performance)",
-    description="Enterprise-Grade RAG with Pinecone, Recursive Real-time Chunking, and PyMuPDF Extraction",
-    version="3.0.0"
-)
-
-# 2. Production Security & Rate Limiting
-app.state.limiter = limiter
-app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
-
-@app.exception_handler(Exception)
-async def global_exception_handler(request: Request, exc: Exception):
-    return JSONResponse(
-        status_code=500,
-        content={"error": "INTERNAL_SERVER_ERROR", "detail": str(exc)}
+# --- 1. Production Diagnostics & Boot ---
+def create_application() -> FastAPI:
+    application = FastAPI(
+        title=settings.PROJECT_NAME,
+        version=settings.VERSION,
+        description="Production-Ready RAG with Pinecone & Groq",
+        docs_url="/docs" if settings.DEBUG else None,
+        redoc_url="/redoc" if settings.DEBUG else None,
     )
+    return application
 
-# 3. Middleware: CORS Optimization
+app = create_application()
+limiter = Limiter(key_func=get_remote_address)
+
+# --- 2. Middleware: Logging & Performance ---
+class LoggingMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request: Request, call_next):
+        start_time = time.time()
+        response = await call_next(request)
+        process_time = time.time() - start_time
+        
+        logger.info(
+            "API_REQUEST",
+            method=request.method,
+            path=request.url.path,
+            status_code=response.status_code,
+            latency=f"{process_time:.4f}s"
+        )
+        response.headers["X-Process-Time"] = f"{process_time:.4f}s"
+        return response
+
+app.add_middleware(LoggingMiddleware)
+
+# --- 3. Middleware: Security & CORS ---
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"], # In strict production, put your frontend domain here
+    allow_origins=[str(origin) for origin in settings.BACKEND_CORS_ORIGINS],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# 4. Mount Industry-Standard Routes
-app.include_router(router)
+# --- 4. Global Exception Handlers ---
+@app.exception_handler(RateLimitExceeded)
+async def custom_rate_limit_handler(request: Request, exc: RateLimitExceeded):
+    return JSONResponse(
+        status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+        content={
+            "success": False,
+            "data": None,
+            "error": "RATE_LIMIT_EXCEEDED",
+            "message": "Too many requests. Please try again later."
+        }
+    )
 
-# 5. Production Diagnostics & Boot Check
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request: Request, exc: RequestValidationError):
+    logger.error("VALIDATION_ERROR", errors=exc.errors(), body=await request.body())
+    return JSONResponse(
+        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+        content={
+            "success": False,
+            "data": None,
+            "error": "VALIDATION_ERROR",
+            "message": "Validation failed",
+            "details": exc.errors()
+        }
+    )
+
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    # Log the full stack trace internally
+    logger.exception("GLOBAL_EXCEPTION", error=str(exc), path=request.url.path)
+    
+    # Hide details in production
+    detail = str(exc) if settings.DEBUG else "Internal Server Error"
+    
+    return JSONResponse(
+        status_code=500,
+        content={
+            "success": False,
+            "data": None,
+            "error": "INTERNAL_SERVER_ERROR",
+            "message": detail
+        }
+    )
+
+# --- 5. Routing (Versioned) ---
+app.include_router(router, prefix=settings.API_V1_STR)
+
+# --- 6. Production Health check ---
+@app.get("/health")
+@app.get("/")
+async def health_check():
+    return {
+        "success": True,
+        "data": {
+            "status": "healthy",
+            "version": settings.VERSION,
+            "environment": settings.ENV
+        },
+        "error": None
+    }
+
+# --- 7. Lifecycle Events ---
 @app.on_event("startup")
 async def startup_event():
-    print("\n" + "="*60)
-    print("      ***  RAG PREMIUM v3.0 - HIGH PERFORMANCE BOOT  ***")
-    print("="*60)
+    logger.info("BOOT_START", env=settings.ENV, debug=settings.DEBUG)
     
     # Check MongoDB
     from app.db.client import connect_to_mongo
     try:
         await connect_to_mongo()
-        print("  [OK] MONGODB ATLAS    |  CONNECTED (PERSISTENCE LAYER)")
+        logger.info("DB_STATUS", engine="MongoDB", status="CONNECTED")
     except Exception as e:
-        print(f"  [ERROR] MONGODB ATLAS |  OFFLINE (ERROR: {e})")
+        logger.error("DB_STATUS", engine="MongoDB", status="OFFLINE", error=str(e))
 
     # Check Pinecone
     try:
         from pinecone import Pinecone
         pc = Pinecone(api_key=settings.PINECONE_API_KEY)
         pc.list_indexes()
-        print("  [OK] PINECONE VECTOR  |  CONNECTED (VERSIONED CLUSTER)")
+        logger.info("DB_STATUS", engine="Pinecone", status="CONNECTED")
     except Exception as e:
-        print(f"  [ERROR] PINECONE VECTOR|  OFFLINE (ERROR: {e})")
-        
-    # Check Groq Hub
-    if settings.GROQ_API_KEY and len(settings.GROQ_API_KEY) > 10:
-        print("  [OK] GROQ CORE AI HUB |  AUTHORIZED (STREAMING ENABLED)")
-    else:
-        print("  [ERROR] GROQ HUB      |  UNAUTHORIZED (KEY MISSING)")
-
-    print("  [OK] RAG PIPELINE     |  REAL-TIME RECURSIVE CHUNKING ACTIVE")
-    print("="*60 + "\n")
+        logger.error("DB_STATUS", engine="Pinecone", status="OFFLINE", error=str(e))
 
 @app.on_event("shutdown")
 async def shutdown_event():
     from app.db.client import close_mongo_connection
     await close_mongo_connection()
-
-@app.get("/health")
-async def health_check():
-    return {"status": "healthy", "version": "3.0.0", "engine": "high_performance_v3"}
+    logger.info("BOOT_SHUTDOWN", status="CLEAN")

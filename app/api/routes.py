@@ -3,7 +3,7 @@ import shutil
 import tempfile
 import time
 from typing import List, Optional
-from fastapi import APIRouter, File, UploadFile, HTTPException, Depends, Request, BackgroundTasks
+from fastapi import APIRouter, File, UploadFile, HTTPException, Depends, Request, BackgroundTasks, Query
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 from slowapi import Limiter
@@ -95,8 +95,8 @@ async def rename_session(session_id: str, title: str):
 async def upload_file(
     request: Request, 
     file: UploadFile = File(...), 
-    user_id: str = "guest", 
-    session_id: Optional[str] = None
+    user_id: str = Query("guest"), 
+    session_id: Optional[str] = Query(None)
 ):
     """Deep ingestion pipeline with synchronous persistence for verified indexing."""
     start_time = time.time()

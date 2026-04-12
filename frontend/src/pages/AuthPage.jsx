@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import axios from 'axios';
+import apiClient from '../api/apiClient';
 import toast from 'react-hot-toast';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Shield, ArrowRight, UserPlus, LogIn, ChevronRight } from 'lucide-react';
@@ -16,9 +16,10 @@ const AuthPage = ({ onAuthSuccess }) => {
 
     setIsLoading(true);
     try {
-      const res = await axios.post(`/api/auth/${mode}`, { email, password });
+      const res = await apiClient.post(`/auth/${mode}`, { email, password });
+      const result = res.data.data || res.data;
       toast.success(mode === 'login' ? 'Welcome back!' : 'Account created');
-      onAuthSuccess({ _id: res.data.user_id, email: res.data.email, is_verified: true });
+      onAuthSuccess({ _id: result.user_id, email: result.email, is_verified: true });
     } catch (error) {
       const msg = error.response?.data?.detail || 'Authentication failed';
       toast.error(msg);
