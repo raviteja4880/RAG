@@ -23,11 +23,28 @@ from app.core.logger import logger
 router = APIRouter()
 limiter = Limiter(key_func=get_remote_address)
 
-# Global Service Singleton instances
-ingestion = IngestionService()
-retrieval = RetrievalService()
-llm = LLMService()
-vector_store = VectorStoreService()
+# Lazy Service Singletons (Prevents blocking server startup)
+_services = {}
+
+def get_ingestion() -> IngestionService:
+    if "ingestion" not in _services:
+        _services["ingestion"] = IngestionService()
+    return _services["ingestion"]
+
+def get_retrieval() -> RetrievalService:
+    if "retrieval" not in _services:
+        _services["retrieval"] = RetrievalService()
+    return _services["retrieval"]
+
+def get_llm() -> LLMService:
+    if "llm" not in _services:
+        _services["llm"] = LLMService()
+    return _services["llm"]
+
+def get_vector_store() -> VectorStoreService:
+    if "vector_store" not in _services:
+        _services["vector_store"] = VectorStoreService()
+    return _services["vector_store"]
 
 # 2. Pydantic Models
 class MessageRequest(BaseModel):
@@ -71,7 +88,7 @@ async def delete_session(session_id: str):
     # 1. Clear Database Messages
     await history_service.delete_session(session_id)
     # 2. Clear Vectors for strict data isolation
-    vector_store.delete_by_session(session_id)
+    get_vector_store().delete_by_session(session_id)
     return {"status": "deleted"}
 
 @router.post("/history/add_message")
@@ -109,8 +126,8 @@ async def upload_file(
             tmp_path = tmp.name
 
         # --- SYNCHRONOUS PROCESSING (Ensures data is ready) ---
-        docs = ingestion.process_file(tmp_path, user_id=user_id, session_id=session_id)
-        vector_store.upsert_documents(docs)
+        docs = get_ingestion().process_file(tmp_path, user_id=user_id, session_id=session_id)
+        get_vector_store().upsert_documents(docs)
         
         # PERSIST: Add document marker to chat history
         if session_id:
@@ -146,7 +163,7 @@ async def ask_question(request: Request, body: QuestionRequest, user_id: str = "
             await history_service.add_message(body.session_id, "user", body.question)
 
         # 1. Phase A: Retrieval (Cached & Filtered by user_id AND session_id)
-        top_docs = retrieval.retrieve_and_rerank(
+        top_docs = get_retrieval().retrieve_and_rerank(
             body.question, 
             history_list, 
             user_id=user_id, 
@@ -161,7 +178,7 @@ async def ask_question(request: Request, body: QuestionRequest, user_id: str = "
         # 2. Phase B: Context-Aware Streaming with Persistence hook
         async def stream_and_persist():
             full_response = ""
-            async for chunk in llm.generate_stream(body.question, context, history_list):
+            async for chunk in get_llm().generate_stream(body.question, context, history_list):
                 full_response += chunk
                 yield chunk
             
