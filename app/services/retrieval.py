@@ -1,5 +1,4 @@
 from typing import List, Optional
-from flashrank import Ranker, RerankRequest
 from langchain_core.documents import Document
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_groq import ChatGroq
@@ -12,12 +11,17 @@ class RetrievalService:
         # 1. Initialize Vector Store
         self.vector_store_service = VectorStoreService()
         
-        # 2. Initialize Reranker (Local/Fast)
-        self.ranker = Ranker(model_name="ms-marco-MiniLM-L-12-v2", cache_dir="/tmp/flashrank")
+        # 2. Initialize Reranker (Optional/Resilient)
+        try:
+            from flashrank import Ranker
+            self.ranker = Ranker(model_name="ms-marco-MiniLM-L-12-v2", cache_dir="/tmp/flashrank")
+        except (ImportError, Exception):
+            print("WARN: FlashRank not available, skipping reranking phase.")
+            self.ranker = None
         
         # 3. Initialize Query Rewriter (Groq)
         self.llm = ChatGroq(
-            model="llama-3.1-8b-instant",
+            model="llama-3.3-70b-versatile",
             temperature=0,
             groq_api_key=settings.GROQ_API_KEY
         )
@@ -93,15 +97,19 @@ class RetrievalService:
             initial_docs = [Document(**d) for d in initial_docs]
 
         # 3. Phase 2: Reranking (Refinement Top-K=5)
-        # Convert documents to FlashRank format
-        passages = [
-            {"id": i, "text": doc.page_content, "meta": doc.metadata} 
-            for i, doc in enumerate(initial_docs)
-        ]
-        
-        from flashrank import RerankRequest
-        rerank_request = RerankRequest(query=standalone_query, passages=passages)
-        results = self.ranker.rerank(rerank_request)
+        if self.ranker:
+            # Convert documents to FlashRank format
+            passages = [
+                {"id": i, "text": doc.page_content, "meta": doc.metadata} 
+                for i, doc in enumerate(initial_docs)
+            ]
+            
+            from flashrank import RerankRequest
+            rerank_request = RerankRequest(query=standalone_query, passages=passages)
+            results = self.ranker.rerank(rerank_request)
+        else:
+            # Fallback to pure Vector similarity if reranker failed to install
+            return initial_docs[:settings.RERANK_K]
         
         # 4. Phase 3: Filter & Format Final Results
         final_docs = []
